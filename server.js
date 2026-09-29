@@ -38,7 +38,6 @@ function writeJSON(filePath, data) {
     fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
 }
 
-// ALWAYS ensure admin exists - this is the fix
 function ensureAdmin() {
     let usersList = readJSON(usersFile);
     const adminExists = usersList.find(u => u.regNumber === 'COM/ADMIN/00');
@@ -60,7 +59,7 @@ function ensureAdmin() {
 
 ensureAdmin();
 
-// ================= AUTHENTICATION ROUTES =================
+// ================= AUTH =================
 app.post('/api/register', (req, res) => {
     const { regNumber, name, email, password, role, passkey } = req.body;
     if (!regNumber || !name || !password || !role) {
@@ -82,7 +81,7 @@ app.post('/api/register', (req, res) => {
 });
 
 app.post('/api/login', (req, res) => {
-    ensureAdmin(); // make sure admin exists before login
+    ensureAdmin();
     const { regNumber, password } = req.body;
     let usersList = readJSON(usersFile);
     const user = usersList.find(u => u.regNumber === regNumber);
@@ -103,7 +102,7 @@ app.post('/api/login', (req, res) => {
     res.json({ message: 'Login successful!', user: { regNumber: user.regNumber, name: user.name, role: user.role, email: user.email } });
 });
 
-// ================= ADMIN & USER MANAGEMENT ROUTES =================
+// ================= ADMIN & USER MANAGEMENT =================
 app.get('/api/users/count', (req, res) => {
     let usersList = readJSON(usersFile);
     let stats = { total: usersList.length, students: 0, technicians: 0, admins: 0 };
@@ -131,7 +130,38 @@ app.post('/api/users/approve', (req, res) => {
     res.json({ message: 'User approved successfully!' });
 });
 
-// ================= LAB MANAGEMENT ROUTES =================
+// ===== NEW: VIEW ALL USERS - TO HELP WITH PASSWORD =====
+app.get('/api/users', (req, res) => {
+    let usersList = readJSON(usersFile);
+    res.json(usersList);
+});
+
+// ===== NEW: RESET PASSWORD - ADMIN HELPS USER =====
+app.post('/api/users/reset-password', (req, res) => {
+    const { regNumber, newPassword } = req.body;
+    if (!regNumber || !newPassword) {
+        return res.status(400).json({ error: 'RegNumber and newPassword required' });
+    }
+    let usersList = readJSON(usersFile);
+    const user = usersList.find(u => u.regNumber === regNumber);
+    if (!user) return res.status(404).json({ error: 'User not found.' });
+    user.password = newPassword;
+    user.failedAttempts = 0; // unlock account
+    writeJSON(usersFile, usersList);
+    res.json({ message: `Password for ${regNumber} reset to ${newPassword} successfully!` });
+});
+
+// DELETE USER
+app.delete('/api/users/:regNumber', (req, res) => {
+    let usersList = readJSON(usersFile);
+    const reg = req.params.regNumber;
+    if (reg === 'COM/ADMIN/00') return res.status(403).json({ error: 'Cannot delete main admin' });
+    usersList = usersList.filter(u => u.regNumber !== reg);
+    writeJSON(usersFile, usersList);
+    res.json({ message: 'User deleted' });
+});
+
+// ================= LABS, EQUIPMENT, BOOKINGS (same as before) =================
 app.get('/api/labs', (req, res) => { res.json(readJSON(labsFile)); });
 app.post('/api/labs', (req, res) => {
     const { labName, capacity } = req.body;
@@ -150,7 +180,6 @@ app.delete('/api/labs/:labID', (req, res) => {
     res.json({ message: 'Lab removed successfully!' });
 });
 
-// ================= EQUIPMENT & FAULTY ROUTES =================
 app.get('/api/equipment', (req, res) => { res.json(readJSON(equipmentFile)); });
 app.post('/api/equipment/upload', (req, res) => {
     const { labID, name, serialNo, status, technicianReg, conditionSummary } = req.body;
@@ -170,7 +199,6 @@ app.post('/api/equipment/resolve', (req, res) => {
     res.json({ message: 'Equipment marked as fixed/operational!' });
 });
 
-// ================= BOOKING ROUTES =================
 app.get('/api/bookings', (req, res) => {
     const { regNumber } = req.query;
     let bookings = readJSON(bookingsFile);
@@ -214,7 +242,6 @@ app.post('/api/bookings/approve', (req, res) => {
     res.json({ message: 'Lab booking approved successfully!' });
 });
 
-// FIX FOR VERCEL
 if (require.main === module) {
   app.listen(PORT, () => {
     console.log(`Server is running at http://localhost:${PORT}`);
