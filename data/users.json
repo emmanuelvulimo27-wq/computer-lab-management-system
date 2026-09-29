@@ -1,0 +1,29 @@
+[
+  {
+    "regNumber": "COM/ADMIN/00",
+    "name": "System Administrator",
+    "email": "admin@lab.com",
+    "password": "admin123",
+    "role": "Administrator",
+    "status": "Approved",
+    "failedAttempts": 0
+  },
+  {
+    "regNumber": "COM/B/01-00157/2025",
+    "name": "lona okero",
+    "email": "vulimoemmanuel27@gmail.com",
+    "password": "Emmahlove@1",
+    "role": "Student",
+    "status": "Approved",
+    "failedAttempts": 0
+  },
+  {
+    "regNumber": "Tech01",
+    "name": "Emmanuel vulimo",
+    "email": "vulimoemmanuel0@gmail.com",
+    "password": "Emmahlove@1",
+    "role": "Technician",
+    "status": "Approved",
+    "failedAttempts": 0
+  }
+]
