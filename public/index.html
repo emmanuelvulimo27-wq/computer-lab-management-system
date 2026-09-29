@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Computer Lab Management System</title>
+    <style>
+                body { font-family: Arial, sans-serif; background-color: #f4f6f9; margin: 0; padding: 20px; }
+        .container { max-width: 900px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .hidden { display: none !important; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        input, select, textarea { width: 100%; padding: 8px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; }
+        button { background-color: #28a745; color: white; border: none; padding: 10px 15px; cursor: pointer; border-radius: 4px; font-size: 16px; width: 100%; }
+        button:hover { background-color: #218838; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; margin-bottom: 25px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #007bff; color: white; }
+        .card { background: #fafafa; border: 1px solid #e1e1e1; padding: 15px; border-radius: 6px; margin-bottom: 20px; }
+        .delete-btn { background-color: #dc3545; width: auto; padding: 5px 10px; font-size: 14px; }
+        .delete-btn:hover { background-color: #c82333; }
+        .action-btn { background-color: #007bff; width: auto; padding: 5px 10px; font-size: 14px; }
+        .action-btn:hover { background-color: #0056b3; }
+        .logout-btn { background-color: #6c757d; width: auto; float: right; margin-bottom: 15px; }
+        .logout-btn:hover { background-color: #5a6268; }
+    </style>
+   <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="container">
+
+    <!-- AUTHENTICATION VIEW -->
+    <div id="authView">
+        <h2 id="authTitle">System Login</h2>
+        <form onsubmit="handleAuth(event)">
+            <div class="form-group" id="roleFieldGroup" style="display: none;">
+                <label for="regRole">User Role</label>
+                <select id="regRole" onchange="toggleRoleFields()">
+                    <option value="Student">Student</option>
+                    <option value="Technician">Technician</option>
+                    <option value="Administrator">Administrator</option>
+                </select>
+            </div>
+
+            <div class="form-group" id="nameFieldGroup" style="display: none;">
+                <label for="authName">Full Name</label>
+                <input type="text" id="authName" placeholder="e.g., John Doe" />
+            </div>
+
+            <div class="form-group" id="emailFieldGroup" style="display: none;">
+                <label for="authEmail">Email Address</label>
+                <input type="email" id="authEmail" placeholder="e.g., john@university.com" />
+            </div>
+
+            <div class="form-group">
+                <label for="regNumber" id="regNumberLabel">Registration Number / Username</label>
+                <input type="text" id="regNumber" placeholder="e.g., COM/B/123456/21" required />
+            </div>
+
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" placeholder="Enter password" required />
+            </div>
+
+            <div class="form-group" id="passkeyFieldGroup" style="display: none;">
+                <label for="authPasskey">Staff Private Passkey</label>
+                <input type="password" id="passkey" placeholder="Enter staff secret passkey" />
+            </div>
+
+            <button type="submit" id="authSubmitBtn">Login</button>
+        </form>
+        
+        <p style="margin-top: 15px; text-align: center;">
+            <a href="javascript:void(0);" id="authToggleText" onclick="toggleAuthMode()">Don't have an account? Register here</a>
+        </p>
+        <div id="forgotPasswordSection" style="display: none; color: red; text-align: center; margin-top: 10px;">
+            Account locked due to multiple failed attempts. Please contact Administrator.
+        </div>
+    </div>
+
+    <!-- ADMIN DASHBOARD -->
+    <div id="adminDashboard" class="hidden">
+        <button type="button" class="logout-btn" onclick="logout()">Logout</button>
+        <h2>Administrator Dashboard</h2>
+        <p id="statsText">Loading stats...</p>
+
+        <div class="card">
+            <h3>Upload / Configure New Lab</h3>
+            <div class="form-group">
+                <label for="newLabName">Lab Name</label>
+                <input type="text" id="newLabName" placeholder="e.g., SPD 004" />
+            </div>
+            <div class="form-group">
+                <label for="newLabCapacity">Capacity / PC Count</label>
+                <input type="number" id="newLabCapacity" placeholder="e.g., 100" />
+            </div>
+            <button type="button" onclick="addNewLab()">Upload Lab</button>
+        </div>
+
+        <h3>Existing Computer Labs</h3>
+        <table id="labsTable"></table>
+
+        <h3>Pending Student Account Approvals</h3>
+        <table id="pendingTable"></table>
+
+        <h3>Equipment Status Monitor</h3>
+        <table id="equipmentTable"></table>
+    </div>
+
+    <!-- TECHNICIAN DASHBOARD -->
+    <div id="technicianDashboard" class="hidden">
+        <button type="button" class="logout-btn" onclick="logout()">Logout</button>
+        <h2>Technician Dashboard</h2>
+
+        <h3>Computer Labs Overview</h3>
+        <table id="techLabsTable"></table>
+
+        <div class="card">
+            <h3>Upload Faulty Equipment Record</h3>
+            <div class="form-group">
+                <label for="techLabSelect">Select Lab</label>
+                <select id="techLabSelect"></select>
+            </div>
+            <div class="form-group">
+                <label for="eqName">Equipment / Item Name</label>
+                <input type="text" id="eqName" placeholder="e.g., Dell Monitor / CPU" />
+            </div>
+            <div class="form-group">
+                <label for="eqSerial">Serial Number</label>
+                <input type="text" id="eqSerial" placeholder="e.g., SN-987654" />
+            </div>
+            <div class="form-group">
+                <label for="techCondition">Condition Summary / Fault Details</label>
+                <textarea id="techCondition" placeholder="Describe the issue..."></textarea>
+            </div>
+            <button type="button" onclick="submitFaultyEquipment()">Submit Faulty Report</button>
+        </div>
+
+        <h3>All Student Lab Bookings</h3>
+        <table id="techBookingsTable"></table>
+    </div>
+
+    <!-- STUDENT DASHBOARD -->
+    <div id="studentDashboard" class="hidden">
+        <button type="button" class="logout-btn" onclick="logout()">Logout</button>
+        <h2>Student Dashboard</h2>
+
+        <h3>Available Computer Labs</h3>
+        <table id="studentLabsTable"></table>
+
+        <div class="card">
+            <h3>Book a Computer Lab Session</h3>
+            
+            <div class="form-group">
+                <label for="bookingRegNumber">Registration Number (Optional if logged in)</label>
+                <input type="text" id="bookingRegNumber" placeholder="Leave blank to use your login ID" />
+            </div>
+
+            <div class="form-group">
+                <label for="bookingLabSelect">Select Lab</label>
+                <select id="bookingLabSelect"></select>
+            </div>
+
+            <div class="form-group">
+                <label for="bookingPurpose">Session Purpose / Unit Code</label>
+                <input type="text" id="bookingPurpose" placeholder="e.g., learn to write C++ code" />
+            </div>
+
+            <div class="form-group">
+                <label for="bookingDate">Start Date & Time</label>
+                <input type="datetime-local" id="bookingDate" />
+            </div>
+
+            <div class="form-group">
+                <label for="bookingFinishTime">Finish Date & Time</label>
+                <input type="datetime-local" id="bookingFinishTime" />
+            </div>
+
+            <button type="button" onclick="submitBooking()">Submit Lab Booking Request</button>
+        </div>
+
+        <h3>My Booking History</h3>
+        <table id="studentBookingsTable"></table>
+    </div>
+
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>
