@@ -26,8 +26,10 @@ function readJSON(filePath, defaultData = []) {
     }
     try {
         const data = fs.readFileSync(filePath, 'utf8');
-        return JSON.parse(data);
+        const parsed = JSON.parse(data);
+        return Array.isArray(parsed) ? parsed : defaultData;
     } catch (e) {
+        fs.writeFileSync(filePath, JSON.stringify(defaultData, null, 2));
         return defaultData;
     }
 }
@@ -36,19 +38,27 @@ function writeJSON(filePath, data) {
     fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
 }
 
-let users = readJSON(usersFile);
-if (users.length === 0) {
-    users.push({
-        regNumber: 'COM/ADMIN/00',
-        name: 'System Administrator',
-        email: 'admin@lab.com',
-        password: 'admin123',
-        role: 'Administrator',
-        status: 'Approved',
-        failedAttempts: 0
-    });
-    writeJSON(usersFile, users);
+// ALWAYS ensure admin exists - this is the fix
+function ensureAdmin() {
+    let usersList = readJSON(usersFile);
+    const adminExists = usersList.find(u => u.regNumber === 'COM/ADMIN/00');
+    if (!adminExists) {
+        usersList.push({
+            regNumber: 'COM/ADMIN/00',
+            name: 'System Administrator',
+            email: 'admin@lab.com',
+            password: 'admin123',
+            role: 'Administrator',
+            status: 'Approved',
+            failedAttempts: 0
+        });
+        writeJSON(usersFile, usersList);
+        console.log('Default admin created: COM/ADMIN/00 / admin123');
+    }
+    return usersList;
 }
+
+ensureAdmin();
 
 // ================= AUTHENTICATION ROUTES =================
 app.post('/api/register', (req, res) => {
@@ -72,6 +82,7 @@ app.post('/api/register', (req, res) => {
 });
 
 app.post('/api/login', (req, res) => {
+    ensureAdmin(); // make sure admin exists before login
     const { regNumber, password } = req.body;
     let usersList = readJSON(usersFile);
     const user = usersList.find(u => u.regNumber === regNumber);
