@@ -9,6 +9,7 @@ function toggleAuthMode() {
     const authSubmitBtn = document.getElementById('authSubmitBtn');
     const toggleText = document.getElementById('authToggleText');
     const regLabel = document.getElementById('regNumberLabel');
+    const regInput = document.getElementById('regNumber');
 
     if (isRegistering) {
         if (roleGroup) roleGroup.style.display = 'block';
@@ -20,8 +21,8 @@ function toggleAuthMode() {
         toggleRoleFields();
     } else {
         if (roleGroup) roleGroup.style.display = 'none';
-        if (nameGroup) roleGroup.style.display = 'none';
-        if (emailGroup) roleGroup.style.display = 'none';
+        if (nameGroup) nameGroup.style.display = 'none';
+        if (emailGroup) emailGroup.style.display = 'none';
         const passkeyGroup = document.getElementById('passkeyFieldGroup');
         if (passkeyGroup) passkeyGroup.style.display = 'none';
         
@@ -29,6 +30,7 @@ function toggleAuthMode() {
         if (authSubmitBtn) authSubmitBtn.innerText = 'Login';
         if (toggleText) toggleText.innerText = "Don't have an account? Register here";
         if (regLabel) regLabel.innerText = 'Registration Number / Username';
+        if (regInput) regInput.placeholder = 'e.g., COM/B/123456/21';
     }
 }
 
@@ -40,14 +42,18 @@ function toggleRoleFields() {
 
     if (!roleSelect) return;
 
-    if (roleSelect.value === 'Administrator' || roleSelect.value === 'Technician') {
+    if (roleSelect.value === 'Administrator') {
         if (passkeyGroup) passkeyGroup.style.display = 'block';
-        if (regLabel) regLabel.innerText = 'Username / Staff ID';
-        if (regInput) regInput.placeholder = 'e.g., AdminUser or Tech01';
+        if (regLabel) regLabel.innerText = 'Admin Username (Format: ***/ADMIN/****)';
+        if (regInput) regInput.placeholder = 'e.g., SYS/ADMIN/0001';
+    } else if (roleSelect.value === 'Technician') {
+        if (passkeyGroup) passkeyGroup.style.display = 'block';
+        if (regLabel) regLabel.innerText = 'Technician ID (Format: ***/TECH/****)';
+        if (regInput) regInput.placeholder = 'e.g., LAB/TECH/0001';
     } else {
         if (passkeyGroup) passkeyGroup.style.display = 'none';
-        if (regLabel) regLabel.innerText = 'Registration Number';
-        if (regInput) regInput.placeholder = 'e.g., COM/B/123456/21';
+        if (regLabel) regLabel.innerText = 'Student Registration Number (Format: ***/*/01-00000/_____)';
+        if (regInput) regInput.placeholder = 'e.g., ENG/S/01-12345/12345';
     }
 }
 
@@ -57,6 +63,9 @@ async function handleAuth(event) {
     const regNumber = document.getElementById('regNumber').value.trim();
     const password = document.getElementById('password').value.trim();
     const forgotSection = document.getElementById('forgotPasswordSection');
+    const loginLoader = document.getElementById('loginLoader');
+    const authSubmitBtn = document.getElementById('authSubmitBtn');
+
     if (forgotSection) forgotSection.style.display = 'none';
 
     if (!regNumber || !password) {
@@ -68,7 +77,6 @@ async function handleAuth(event) {
     let payload = { regNumber, password };
 
     if (isRegistering) {
-        endpoint = '/api/register';
         const role = document.getElementById('regRole').value;
         const name = document.getElementById('authName').value.trim();
         const email = document.getElementById('authEmail').value.trim();
@@ -79,11 +87,35 @@ async function handleAuth(event) {
             return;
         }
 
+        if (role === 'Student') {
+            const studentRegex = /^.{3}\/.{1}\/01-\d{5}\/.{5}$/;
+            if (!studentRegex.test(regNumber)) {
+                alert('Invalid Student Registration format!\nRequired format: ***/*/01-00000/*****');
+                return;
+            }
+        } else if (role === 'Technician') {
+            const techRegex = /^.{3}\/TECH\/.{4}$/;
+            if (!techRegex.test(regNumber)) {
+                alert('Invalid Technician ID format!\nRequired format: ***/TECH/****');
+                return;
+            }
+        } else if (role === 'Administrator') {
+            const adminRegex = /^.{3}\/ADMIN\/.{4}$/;
+            if (!adminRegex.test(regNumber)) {
+                alert('Invalid Admin Username format!\nRequired format: ***/ADMIN/****');
+                return;
+            }
+        }
+
+        endpoint = '/api/register';
         payload.role = role;
         payload.name = name;
         payload.email = email;
         payload.passkey = passkey;
     }
+
+    if (loginLoader) loginLoader.style.display = 'block';
+    if (authSubmitBtn) authSubmitBtn.disabled = true;
 
     try {
         const response = await fetch(endpoint, {
@@ -113,6 +145,9 @@ async function handleAuth(event) {
     } catch (err) {
         console.error('Auth error:', err);
         alert(err.message);
+    } finally {
+        if (loginLoader) loginLoader.style.display = 'none';
+        if (authSubmitBtn) authSubmitBtn.disabled = false;
     }
 }
 
@@ -144,6 +179,7 @@ function logout() {
 
 // --- Admin Functions ---
 let globalUsersCache = [];
+let globalLabsCache = [];
 
 async function loadAdminData() {
     try {
@@ -158,27 +194,14 @@ async function loadAdminData() {
             </div>`;
 
         const labsRes = await fetch('/api/labs');
-        const labs = await labsRes.json();
-        let labsHtml = `<tr><th>Lab ID</th><th>Lab Name</th><th>Capacity</th><th>Action</th></tr>`;
-        labs.forEach(l => {
-            labsHtml += `<tr><td>${l.labID}</td><td>${l.labName}</td><td>${l.capacity}</td><td><button type="button" class="delete-btn" onclick="deleteLab(${l.labID})">Remove</button></td></tr>`;
+        globalLabsCache = await labsRes.json();
+        let labsHtml = `<tr><th>Lab Name</th><th>Total Capacity</th><th>Available PCs</th><th>Action</th></tr>`;
+        globalLabsCache.forEach(l => {
+            labsHtml += `<tr><td><b>${l.labName}</b></td><td>${l.capacity} PCs</td><td><span style="color:#27ae60; font-weight:bold;">${l.availablePCs} Free</span></td><td><button type="button" class="delete-btn" onclick="deleteLab(${l.labID})">Remove Lab</button></td></tr>`;
         });
         document.getElementById('labsTable').innerHTML = labsHtml;
 
-        const pendingRes = await fetch('/api/users/pending');
-        const pending = await pendingRes.json();
-        let pendingHtml = `<tr><th>Reg Number</th><th>Name</th><th>Email</th><th>Action</th></tr>`;
-        if (pending.length === 0) {
-            pendingHtml += `<tr><td colspan="4">No pending approvals found.</td></tr>`;
-        } else {
-            pending.forEach(u => {
-                pendingHtml += `<tr><td>${u.regNumber}</td><td>${u.name}</td><td>${u.email}</td><td><button type="button" class="action-btn" onclick="approveUser('${u.regNumber}')">Approve</button></td></tr>`;
-            });
-        }
-        document.getElementById('pendingTable').innerHTML = pendingHtml;
-
-        // Load all users for management / password reset
-        const allUsersRes = await fetch('/api/users/all-detailed');
+        const allUsersRes = await fetch('/api/users');
         if (allUsersRes.ok) {
             globalUsersCache = await allUsersRes.json();
             renderUserManagementTable(globalUsersCache);
@@ -186,16 +209,20 @@ async function loadAdminData() {
 
         const eqRes = await fetch('/api/equipment');
         const equipment = await eqRes.json();
-        let eqHtml = `<tr><th>ID</th><th>Lab ID</th><th>Name</th><th>Serial No</th><th>Status</th><th>Action</th></tr>`;
+        let eqHtml = `<tr><th>Lab Name</th><th>Item Name</th><th>Serial No</th><th>Status</th><th>Action</th></tr>`;
         if (equipment.length === 0) {
-            eqHtml += `<tr><td colspan="6">No equipment records found.</td></tr>`;
+            eqHtml += `<tr><td colspan="5">No equipment records found.</td></tr>`;
         } else {
             equipment.forEach(e => {
+                const labObj = globalLabsCache.find(l => String(l.labID) === String(e.labID));
+                const labDisplayName = labObj ? labObj.labName : 'Computer Lab';
                 const badgeColor = e.status === 'Faulty' ? '#e74c3c' : '#27ae60';
-                const actionBtn = e.status === 'Faulty' 
-                    ? `<button type="button" class="action-btn" onclick="resolveEquipment(${e.equipmentID})">Mark Fixed</button>`
-                    : `<span style="color: ${badgeColor}; font-weight: 600;">Operational</span>`;
-                eqHtml += `<tr><td>${e.equipmentID}</td><td>${e.labID}</td><td>${e.name}</td><td>${e.serialNo}</td><td><span style="background:${badgeColor}; color:#fff; padding:3px 8px; border-radius:4px; font-size:12px;">${e.status}</span></td><td>${actionBtn}</td></tr>`;
+                
+                const actionBtns = `
+                    ${e.status === 'Faulty' ? `<button type="button" class="action-btn" onclick="resolveEquipment(${e.equipmentID})" style="margin-right:5px;">Mark Fixed</button>` : ''}
+                    <button type="button" class="delete-btn" onclick="adminDeleteEquipment(${e.equipmentID})">Delete Report</button>
+                `;
+                eqHtml += `<tr><td><b>${labDisplayName}</b></td><td>${e.name}</td><td>${e.serialNo}</td><td><span style="background:${badgeColor}; color:#fff; padding:3px 8px; border-radius:4px; font-size:12px;">${e.status}</span></td><td>${actionBtns}</td></tr>`;
             });
         }
         document.getElementById('equipmentTable').innerHTML = eqHtml;
@@ -205,31 +232,23 @@ async function loadAdminData() {
 }
 
 function renderUserManagementTable(users) {
-    let container = document.getElementById('userManagementContainer');
-    if (!container) {
-        // Create user management card dynamically if element doesn't exist yet in HTML
-        const adminDash = document.getElementById('adminDashboard');
-        const section = document.createElement('div');
-        section.className = 'dashboard-section';
-        section.innerHTML = `
-            <h3>System User Management & Password Reset</h3>
-            <input type="text" id="userSearchInput" placeholder="Search by Reg Number or Name..." onkeyup="filterUsersTable()" style="padding: 8px; width: 100%; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 4px;">
-            <div style="overflow-x: auto;"><table id="userManagementTable"></table></div>`;
-        adminDash.appendChild(section);
-        container = document.getElementById('userManagementTable');
-    }
+    let container = document.getElementById('userManagementTable');
+    if (!container) return;
 
-    let html = `<tr><th>Reg Number / ID</th><th>Name</th><th>Role</th><th>Status</th><th>Actions</th></tr>`;
+    let html = `<tr><th>Reg Number / ID</th><th>Name</th><th>Role</th><th>Password</th><th>Actions</th></tr>`;
     if (users.length === 0) {
         html += `<tr><td colspan="5">No users found.</td></tr>`;
     } else {
         users.forEach(u => {
             html += `<tr>
-                <td>${u.regNumber}</td>
+                <td><b>${u.regNumber}</b></td>
                 <td>${u.name}</td>
                 <td>${u.role}</td>
-                <td><b>${u.status}</b></td>
-                <td><button type="button" class="action-btn" style="background:#e67e22;" onclick="promptPasswordReset('${u.regNumber}')">Reset Pass</button></td>
+                <td><code style="background:#eee; padding:2px 6px; border-radius:4px; color:#d63031;">${u.password || 'N/A'}</code></td>
+                <td>
+                    <button type="button" class="action-btn" style="background:#e67e22; margin-right:5px;" onclick="promptPasswordReset('${u.regNumber}')">Reset Pass</button>
+                    <button type="button" class="delete-btn" onclick="adminDeleteUser('${u.regNumber}')">Delete User</button>
+                </td>
             </tr>`;
         });
     }
@@ -237,11 +256,39 @@ function renderUserManagementTable(users) {
 }
 
 function filterUsersTable() {
-    const query = document.getElementById('userSearchInput').value.toLowerCase();
+    const searchInput = document.getElementById('userSearchInput');
+    if (!searchInput) return;
+    const query = searchInput.value.toLowerCase();
     const filtered = globalUsersCache.filter(u => 
         u.regNumber.toLowerCase().includes(query) || u.name.toLowerCase().includes(query)
     );
     renderUserManagementTable(filtered);
+}
+
+// Client-side CSV Export Utility
+function exportTableToCSV(tableID, filename) {
+    const table = document.getElementById(tableID);
+    if (!table) return;
+    let csv = [];
+    const rows = table.querySelectorAll('tr');
+    
+    for (let i = 0; i < rows.length; i++) {
+        let row = [], cols = rows[i].querySelectorAll('td, th');
+        for (let j = 0; j < cols.length - 1; j++) { // Skip last action column if desired
+            let data = cols[j].innerText.replace(/(\r\n|\n|\r)/gm, '').replace(/(\s\s)/gm, ' ');
+            row.push('"' + data + '"');
+        }
+        csv.push(row.join(','));
+    }
+    
+    const csvFile = new Blob([csv.join('\n')], { type: 'text/csv' });
+    const downloadLink = document.createElement('a');
+    downloadLink.download = filename;
+    downloadLink.href = window.URL.createObjectURL(csvFile);
+    downloadLink.style.display = 'none';
+    document.body.appendChild(downloadLink);
+    downloadLink.click();
+    document.body.removeChild(downloadLink);
 }
 
 async function promptPasswordReset(regNumber) {
@@ -257,6 +304,38 @@ async function promptPasswordReset(regNumber) {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Password reset failed');
         alert(data.message);
+        loadAdminData();
+    } catch (err) {
+        alert(err.message);
+    }
+}
+
+async function adminDeleteUser(regNumber) {
+    if (regNumber === 'COM/ADMIN/00') {
+        alert('Cannot delete the primary system administrator account.');
+        return;
+    }
+    if (!confirm(`Are you sure you want to delete user account: ${regNumber}?`)) return;
+
+    try {
+        const res = await fetch(`/api/users/${encodeURIComponent(regNumber)}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to delete user');
+        alert(data.message);
+        loadAdminData();
+    } catch (err) {
+        alert(err.message);
+    }
+}
+
+async function adminDeleteEquipment(equipmentID) {
+    if (!confirm('Are you sure you want to delete this equipment maintenance report?')) return;
+    try {
+        const res = await fetch(`/api/equipment/${equipmentID}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to delete report');
+        alert(data.message);
+        loadAdminData();
     } catch (err) {
         alert(err.message);
     }
@@ -267,7 +346,6 @@ async function addNewLab() {
     const capacityField = document.getElementById('newLabCapacity');
     
     if (!labNameField || !capacityField) return;
-
     const labName = labNameField.value.trim();
     const capacity = capacityField.value.trim();
 
@@ -290,7 +368,6 @@ async function addNewLab() {
         capacityField.value = '';
         loadAdminData();
     } catch (err) {
-        console.error('Error adding lab:', err);
         alert(err.message);
     }
 }
@@ -304,24 +381,6 @@ async function deleteLab(labID) {
         alert(data.message);
         loadAdminData();
     } catch (err) {
-        console.error('Error deleting lab:', err);
-        alert(err.message);
-    }
-}
-
-async function approveUser(regNumber) {
-    try {
-        const res = await fetch('/api/users/approve', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ regNumber })
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Approval failed');
-        alert(data.message);
-        loadAdminData();
-    } catch (err) {
-        console.error('Approval error:', err);
         alert(err.message);
     }
 }
@@ -338,7 +397,6 @@ async function resolveEquipment(equipmentID) {
         alert(data.message);
         loadAdminData();
     } catch (err) {
-        console.error('Error resolving equipment:', err);
         alert(err.message);
     }
 }
@@ -349,15 +407,15 @@ async function loadTechData() {
         const labsRes = await fetch('/api/labs');
         const labs = await labsRes.json();
         
-        let labsHtml = `<tr><th>Lab ID</th><th>Lab Name</th><th>Available Computer Count</th></tr>`;
+        let labsHtml = `<tr><th>Lab Name</th><th>Total Capacity</th><th>Available PCs</th></tr>`;
         let selectOptions = '';
         if (labs.length === 0) {
             labsHtml += `<tr><td colspan="3">No labs configured yet.</td></tr>`;
             selectOptions = `<option value="">No labs available</option>`;
         } else {
             labs.forEach(l => {
-                labsHtml += `<tr><td>${l.labID}</td><td>${l.labName}</td><td>${l.capacity}</td></tr>`;
-                selectOptions += `<option value="${l.labID}">${l.labName} (Capacity: ${l.capacity})</option>`;
+                labsHtml += `<tr><td><b>${l.labName}</b></td><td>${l.capacity} PCs</td><td><span style="color:#27ae60; font-weight:bold;">${l.availablePCs} Free</span></td></tr>`;
+                selectOptions += `<option value="${l.labID}">${l.labName} (Capacity: ${l.capacity}, Available: ${l.availablePCs})</option>`;
             });
         }
         document.getElementById('techLabsTable').innerHTML = labsHtml;
@@ -366,16 +424,29 @@ async function loadTechData() {
         const bookingsRes = await fetch('/api/bookings/all');
         if (bookingsRes.ok) {
             const bookings = await bookingsRes.json();
-            let bookingsHtml = `<tr><th>Booking ID</th><th>Student Reg</th><th>Lab ID</th><th>Purpose</th><th>Start Time</th><th>Finish Time</th><th>Status</th><th>Action</th></tr>`;
+            let bookingsHtml = `<tr><th>Student Reg</th><th>Lab Name</th><th>Purpose</th><th>Start Time</th><th>Finish Time</th><th>Status</th><th>Actions</th></tr>`;
+            
             if (bookings.length === 0) {
-                bookingsHtml += `<tr><td colspan="8">No lab booking requests found.</td></tr>`;
+                bookingsHtml += `<tr><td colspan="7" style="text-align:center; padding:20px; color:#777;">No lab booking applications found.</td></tr>`;
             } else {
                 bookings.forEach(b => {
                     const statusColor = b.status === 'Approved' ? '#27ae60' : '#f39c12';
                     const approveAction = b.status === 'Approved' 
                         ? `<span style="color: ${statusColor}; font-weight: 600;">Approved</span>`
-                        : `<button type="button" class="action-btn" onclick="approveBooking(${b.bookingID})">Approve</button>`;
-                    bookingsHtml += `<tr><td>${b.bookingID}</td><td>${b.regNumber}</td><td>${b.labID}</td><td>${b.purpose}</td><td>${b.bookingDate}</td><td>${b.finishTime || 'N/A'}</td><td><span style="background:${statusColor}; color:#fff; padding:3px 8px; border-radius:4px; font-size:12px;">${b.status || 'Pending'}</span></td><td>${approveAction}</td></tr>`;
+                        : `<button type="button" class="action-btn" onclick="approveBooking(${b.bookingID})" style="background:#27ae60; margin-right:5px;">Approve</button>`;
+                    
+                    bookingsHtml += `<tr>
+                        <td style="font-weight:600;">${b.regNumber}</td>
+                        <td><b>${b.labName || 'Computer Lab'}</b></td>
+                        <td>${b.purpose}</td>
+                        <td>${b.bookingDate}</td>
+                        <td>${b.finishTime || 'N/A'}</td>
+                        <td><span style="background:${statusColor}; color:#fff; padding:4px 10px; border-radius:4px; font-size:11px;">${b.status || 'Pending'}</span></td>
+                        <td>
+                            ${approveAction}
+                            <button type="button" class="delete-btn" onclick="cancelBooking(${b.bookingID})">Delete / Reject</button>
+                        </td>
+                    </tr>`;
                 });
             }
             document.getElementById('techBookingsTable').innerHTML = bookingsHtml;
@@ -397,7 +468,6 @@ async function approveBooking(bookingID) {
         alert(data.message || 'Lab booking approved successfully!');
         loadTechData();
     } catch (err) {
-        console.error('Booking approval error:', err);
         alert(err.message);
     }
 }
@@ -427,8 +497,8 @@ async function submitFaultyEquipment() {
         document.getElementById('eqName').value = '';
         document.getElementById('eqSerial').value = '';
         document.getElementById('techCondition').value = '';
+        loadTechData();
     } catch (err) {
-        console.error('Equipment upload error:', err);
         alert(err.message);
     }
 }
@@ -440,7 +510,7 @@ async function loadStudentData() {
         const res = await fetch('/api/labs');
         const labs = await res.json();
         
-        let labsHtml = `<tr><th>Lab ID</th><th>Lab Name</th><th>Capacity</th></tr>`;
+        let labsHtml = `<tr><th>Lab Name</th><th>Total Capacity</th><th>Available PCs</th></tr>`;
         let selectOptions = '';
         
         if (labs.length === 0) {
@@ -448,8 +518,8 @@ async function loadStudentData() {
             selectOptions = `<option value="">No labs available</option>`;
         } else {
             labs.forEach(l => {
-                labsHtml += `<tr><td>${l.labID}</td><td>${l.labName}</td><td>${l.capacity}</td></tr>`;
-                selectOptions += `<option value="${l.labID}">${l.labName} (Capacity: ${l.capacity})</option>`;
+                labsHtml += `<tr><td><b>${l.labName}</b></td><td>${l.capacity} PCs</td><td><span style="color:#27ae60; font-weight:bold;">${l.availablePCs} Free</span></td></tr>`;
+                selectOptions += `<option value="${l.labID}">${l.labName} (Available PCs: ${l.availablePCs})</option>`;
             });
         }
         document.getElementById('studentLabsTable').innerHTML = labsHtml;
@@ -460,16 +530,15 @@ async function loadStudentData() {
                 const bookingsRes = await fetch(`/api/bookings?regNumber=${user.regNumber}`);
                 if (bookingsRes.ok) {
                     const bookings = await bookingsRes.json();
-                    let bookingsHtml = `<tr><th>Booking ID</th><th>Lab Name</th><th>Purpose</th><th>Start Time</th><th>Finish Time</th><th>Status</th><th>Action</th></tr>`;
+                    let bookingsHtml = `<tr><th>Lab Name</th><th>Purpose</th><th>Start Time</th><th>Finish Time</th><th>Status</th><th>Action</th></tr>`;
                     if (bookings.length === 0) {
-                        bookingsHtml += `<tr><td colspan="7">No active bookings found.</td></tr>`;
+                        bookingsHtml += `<tr><td colspan="6">No active bookings found.</td></tr>`;
                     } else {
                         bookings.forEach(b => {
                             const statusColor = b.status === 'Approved' ? '#27ae60' : '#f39c12';
                             const cancelBtn = `<button type="button" class="delete-btn" onclick="cancelBooking(${b.bookingID})">Cancel</button>`;
                             bookingsHtml += `<tr>
-                                <td>${b.bookingID}</td>
-                                <td>${b.labName || b.labID}</td>
+                                <td><b>${b.labName || 'Computer Lab'}</b></td>
                                 <td>${b.purpose}</td>
                                 <td>${b.bookingDate}</td>
                                 <td>${b.finishTime || 'N/A'}</td>
@@ -481,7 +550,7 @@ async function loadStudentData() {
                     document.getElementById('studentBookingsTable').innerHTML = bookingsHtml;
                 }
             } catch (e) {
-                document.getElementById('studentBookingsTable').innerHTML = `<tr><td colspan="7">Booking history will appear here once connected.</td></tr>`;
+                document.getElementById('studentBookingsTable').innerHTML = `<tr><td colspan="6">Booking history will appear here once connected.</td></tr>`;
             }
         }
     } catch (err) {
@@ -490,7 +559,7 @@ async function loadStudentData() {
 }
 
 async function cancelBooking(bookingID) {
-    if (!confirm('Are you sure you want to cancel this booking?')) return;
+    if (!confirm('Are you sure you want to cancel/delete this booking?')) return;
     try {
         const res = await fetch(`/api/bookings/${bookingID}`, { method: 'DELETE' });
         const data = await res.json();
@@ -498,6 +567,8 @@ async function cancelBooking(bookingID) {
         
         alert(data.message || 'Booking cancelled successfully.');
         loadStudentData();
+        const techBookingsTable = document.getElementById('techBookingsTable');
+        if (techBookingsTable) loadTechData();
     } catch (err) {
         alert(err.message);
     }
@@ -505,9 +576,7 @@ async function cancelBooking(bookingID) {
 
 async function submitBooking() {
     const user = JSON.parse(localStorage.getItem('currentUser')) || {};
-    const regInput = document.getElementById('bookingRegNumber');
-    
-    const regNumber = (regInput && regInput.value.trim()) ? regInput.value.trim() : (user.regNumber || '');
+    const regNumber = user.regNumber || '';
     const labID = document.getElementById('bookingLabSelect').value;
     const purpose = document.getElementById('bookingPurpose').value.trim();
     const bookingDate = document.getElementById('bookingDate').value;
@@ -525,12 +594,22 @@ async function submitBooking() {
         alert('Please enter a session purpose or unit code.');
         return;
     }
-    if (!bookingDate) {
-        alert('Please select a start date and time.');
+    if (!bookingDate || !finishTime) {
+        alert('Please specify both start and finish dates and times.');
         return;
     }
-    if (!finishTime) {
-        alert('Please select a finish date and time.');
+
+    // Frontend Date & Time Validation
+    const now = new Date();
+    const startDate = new Date(bookingDate);
+    const finishDate = new Date(finishTime);
+
+    if (startDate < now) {
+        alert('You cannot book a lab session in the past.');
+        return;
+    }
+    if (finishDate <= startDate) {
+        alert('Finish time must be strictly after the start time.');
         return;
     }
 
@@ -551,13 +630,11 @@ async function submitBooking() {
         if (!res.ok) throw new Error(data.error || 'Failed to submit booking');
         
         alert(data.message || 'Lab booking submitted successfully!');
-        if (regInput) regInput.value = '';
         document.getElementById('bookingPurpose').value = '';
         document.getElementById('bookingDate').value = '';
         document.getElementById('bookingFinishTime').value = '';
         loadStudentData();
     } catch (err) {
-        console.error('Booking error:', err);
         alert(err.message);
     }
 }

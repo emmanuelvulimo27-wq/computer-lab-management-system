@@ -1,6 +1,7 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const path = require('path');
+const nodemailer = require('nodemailer'); // Optional: npm install nodemailer
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -33,7 +34,7 @@ const User = mongoose.model('User', userSchema);
 const labSchema = new mongoose.Schema({
   labID: { type: Number, unique: true },
   labName: String,
-  capacity: String
+  capacity: Number
 }, { timestamps: true });
 const Lab = mongoose.model('Lab', labSchema);
 
@@ -59,6 +60,25 @@ const bookingSchema = new mongoose.Schema({
   status: { type: String, default: 'Pending' }
 }, { timestamps: true });
 const Booking = mongoose.model('Booking', bookingSchema);
+
+// ========== EMAIL TRANSPORTER CONFIG (Optional Mock/Nodemailer) ==========
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: process.env.EMAIL_USER || 'labsystem@support.com',
+    pass: process.env.EMAIL_PASS || 'mockpassword'
+  }
+});
+
+async function sendEmailNotification(toEmail, subject, textMessage) {
+  if (!toEmail) return;
+  try {
+    // If real credentials aren't set, this will safely log instead of crashing
+    console.log(`[Email Notification] To: ${toEmail} | Subject: ${subject} | Message: ${textMessage}`);
+  } catch (err) {
+    console.error('Email dispatch error:', err);
+  }
+}
 
 // ========== ENSURE ADMIN ==========
 async function ensureAdmin() {
@@ -129,28 +149,8 @@ app.get('/api/users/count', async (req, res) => {
   res.json(stats);
 });
 
-app.get('/api/users/pending', async (req, res) => {
-  const pending = await User.find({ status: 'Pending' }).select('regNumber name email');
-  res.json(pending);
-});
-
-app.post('/api/users/approve', async (req, res) => {
-  const { regNumber } = req.body;
-  const user = await User.findOne({ regNumber });
-  if (!user) return res.status(404).json({ error: 'User not found.' });
-  user.status = 'Approved';
-  await user.save();
-  res.json({ message: 'User approved successfully!' });
-});
-
 app.get('/api/users', async (req, res) => {
   const usersList = await User.find();
-  res.json(usersList);
-});
-
-// Added route for detailed list used by admin user management search table
-app.get('/api/users/all-detailed', async (req, res) => {
-  const usersList = await User.find().select('regNumber name role status');
   res.json(usersList);
 });
 
@@ -174,26 +174,47 @@ app.delete('/api/users/:regNumber', async (req, res) => {
   res.json({ message: 'User deleted' });
 });
 
-// ================= LABS, EQUIPMENT, BOOKINGS =================
-app.get('/api/labs', async (req, res) => { res.json(await Lab.find()); });
+// ================= LABS (WITH REAL-TIME SEAT CALCULATION) =================
+app.get('/api/labs', async (req, res) => {
+  const labs = await Lab.find();
+  const bookings = await Booking.find({ status: 'Approved' });
+  
+  // Calculate active seat usage per lab
+  const enrichedLabs = labs.map(l => {
+    const activeCount = bookings.filter(b => String(b.labID) === String(l.labID)).length;
+    const capacityNum = Number(l.capacity) || 0;
+    const availablePCs = Math.max(0, capacityNum - activeCount);
+    return {
+      ...l.toObject(),
+      availablePCs,
+      activeBookingsCount: activeCount
+    };
+  });
+  res.json(enrichedLabs);
+});
+
 app.post('/api/labs', async (req, res) => {
   const { labName, capacity } = req.body;
   if (!labName || !capacity) return res.status(400).json({ error: 'Lab name and capacity are required.' });
-  const newLab = await Lab.create({ labID: Date.now(), labName, capacity });
+  const newLab = await Lab.create({ labID: Date.now(), labName, capacity: Number(capacity) });
   res.json({ message: 'Lab uploaded successfully!', labID: newLab.labID });
 });
+
 app.delete('/api/labs/:labID', async (req, res) => {
   const labID = Number(req.params.labID);
   await Lab.deleteOne({ labID });
   res.json({ message: 'Lab removed successfully!' });
 });
 
+// ================= EQUIPMENT =================
 app.get('/api/equipment', async (req, res) => { res.json(await Equipment.find()); });
+
 app.post('/api/equipment/upload', async (req, res) => {
   const { labID, name, serialNo, status, technicianReg, conditionSummary } = req.body;
-  const newEq = await Equipment.create({ equipmentID: Date.now(), labID, name, serialNo, status, technicianReg, conditionSummary });
+  await Equipment.create({ equipmentID: Date.now(), labID, name, serialNo, status, technicianReg, conditionSummary });
   res.json({ message: 'Faulty equipment record uploaded successfully!' });
 });
+
 app.post('/api/equipment/resolve', async (req, res) => {
   const equipmentID = Number(req.body.equipmentID);
   const eq = await Equipment.findOne({ equipmentID });
@@ -203,6 +224,13 @@ app.post('/api/equipment/resolve', async (req, res) => {
   res.json({ message: 'Equipment marked as fixed/operational!' });
 });
 
+app.delete('/api/equipment/:equipmentID', async (req, res) => {
+  const equipmentID = Number(req.params.equipmentID);
+  await Equipment.deleteOne({ equipmentID });
+  res.json({ message: 'Equipment maintenance report deleted.' });
+});
+
+// ================= BOOKINGS =================
 app.get('/api/bookings', async (req, res) => {
   const { regNumber } = req.query;
   let bookings = await Booking.find();
@@ -230,8 +258,8 @@ app.post('/api/bookings', async (req, res) => {
   if (!regNumber) return res.status(400).json({ error: 'User registration number is missing. Please log in again.' });
   if (!labID) return res.status(400).json({ error: 'Lab ID is required.' });
   if (!purpose) return res.status(400).json({ error: 'Session purpose is required.' });
-  if (!bookingDate) return res.status(400).json({ error: 'Start date and time are required.' });
-  if (!finishTime) return res.status(400).json({ error: 'Finish date and time are required.' });
+  if (!bookingDate || !finishTime) return res.status(400).json({ error: 'Start and finish times are required.' });
+
   await Booking.create({ bookingID: Date.now(), regNumber, email, labID, purpose, bookingDate, finishTime, status: 'Pending' });
   res.json({ message: 'Lab booking submitted successfully!' });
 });
@@ -242,10 +270,15 @@ app.post('/api/bookings/approve', async (req, res) => {
   if (!booking) return res.status(404).json({ error: 'Booking not found.' });
   booking.status = 'Approved';
   await booking.save();
+
+  // Send Email Notification
+  if (booking.email) {
+    sendEmailNotification(booking.email, 'Lab Booking Approved', `Your booking for purpose "${booking.purpose}" has been approved.`);
+  }
+
   res.json({ message: 'Lab booking approved successfully!' });
 });
 
-// Added booking cancellation endpoint for students
 app.delete('/api/bookings/:bookingID', async (req, res) => {
   const bookingID = Number(req.params.bookingID);
   await Booking.deleteOne({ bookingID });
