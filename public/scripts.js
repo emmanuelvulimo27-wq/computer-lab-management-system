@@ -20,8 +20,8 @@ function toggleAuthMode() {
         toggleRoleFields();
     } else {
         if (roleGroup) roleGroup.style.display = 'none';
-        if (nameGroup) roleGroup.style.display = 'none';
-        if (emailGroup) roleGroup.style.display = 'none';
+        if (nameGroup) nameGroup.style.display = 'none';
+        if (emailGroup) emailGroup.style.display = 'none';
         const passkeyGroup = document.getElementById('passkeyFieldGroup');
         if (passkeyGroup) passkeyGroup.style.display = 'none';
         
@@ -72,6 +72,7 @@ async function handleAuth(event) {
         const role = document.getElementById('regRole').value;
         const name = document.getElementById('authName').value.trim();
         const email = document.getElementById('authEmail').value.trim();
+        // FIXED: Corrected ID from 'authPasskey' to 'passkey' to match index.html
         const passkey = document.getElementById('passkey').value.trim();
 
         if (!name) {
@@ -143,19 +144,11 @@ function logout() {
 }
 
 // --- Admin Functions ---
-let globalUsersCache = [];
-
 async function loadAdminData() {
     try {
         const usersRes = await fetch('/api/users/count');
         const stats = await usersRes.json();
-        document.getElementById('statsText').innerHTML = `
-            <div style="display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 10px;">
-                <div style="background: #f8f9fa; padding: 10px 15px; border-radius: 6px; border-left: 4px solid #3498db;">Total Users: <b>${stats.total}</b></div>
-                <div style="background: #f8f9fa; padding: 10px 15px; border-radius: 6px; border-left: 4px solid #2ecc71;">Students: <b>${stats.students}</b></div>
-                <div style="background: #f8f9fa; padding: 10px 15px; border-radius: 6px; border-left: 4px solid #f1c40f;">Techs: <b>${stats.technicians}</b></div>
-                <div style="background: #f8f9fa; padding: 10px 15px; border-radius: 6px; border-left: 4px solid #e74c3c;">Admins: <b>${stats.admins}</b></div>
-            </div>`;
+        document.getElementById('statsText').innerHTML = `Total Users: <b>${stats.total}</b> | Students: <b>${stats.students}</b> | Techs: <b>${stats.technicians}</b> | Admins: <b>${stats.admins}</b>`;
 
         const labsRes = await fetch('/api/labs');
         const labs = await labsRes.json();
@@ -177,13 +170,6 @@ async function loadAdminData() {
         }
         document.getElementById('pendingTable').innerHTML = pendingHtml;
 
-        // Load all users for management / password reset
-        const allUsersRes = await fetch('/api/users/all-detailed');
-        if (allUsersRes.ok) {
-            globalUsersCache = await allUsersRes.json();
-            renderUserManagementTable(globalUsersCache);
-        }
-
         const eqRes = await fetch('/api/equipment');
         const equipment = await eqRes.json();
         let eqHtml = `<tr><th>ID</th><th>Lab ID</th><th>Name</th><th>Serial No</th><th>Status</th><th>Action</th></tr>`;
@@ -191,74 +177,15 @@ async function loadAdminData() {
             eqHtml += `<tr><td colspan="6">No equipment records found.</td></tr>`;
         } else {
             equipment.forEach(e => {
-                const badgeColor = e.status === 'Faulty' ? '#e74c3c' : '#27ae60';
                 const actionBtn = e.status === 'Faulty' 
                     ? `<button type="button" class="action-btn" onclick="resolveEquipment(${e.equipmentID})">Mark Fixed</button>`
-                    : `<span style="color: ${badgeColor}; font-weight: 600;">Operational</span>`;
-                eqHtml += `<tr><td>${e.equipmentID}</td><td>${e.labID}</td><td>${e.name}</td><td>${e.serialNo}</td><td><span style="background:${badgeColor}; color:#fff; padding:3px 8px; border-radius:4px; font-size:12px;">${e.status}</span></td><td>${actionBtn}</td></tr>`;
+                    : `<span style="color: green; font-weight: 600;">Operational</span>`;
+                eqHtml += `<tr><td>${e.equipmentID}</td><td>${e.labID}</td><td>${e.name}</td><td>${e.serialNo}</td><td><b>${e.status}</b></td><td>${actionBtn}</td></tr>`;
             });
         }
         document.getElementById('equipmentTable').innerHTML = eqHtml;
     } catch (err) {
         console.error('Error loading admin dashboard:', err);
-    }
-}
-
-function renderUserManagementTable(users) {
-    let container = document.getElementById('userManagementContainer');
-    if (!container) {
-        // Create user management card dynamically if element doesn't exist yet in HTML
-        const adminDash = document.getElementById('adminDashboard');
-        const section = document.createElement('div');
-        section.className = 'dashboard-section';
-        section.innerHTML = `
-            <h3>System User Management & Password Reset</h3>
-            <input type="text" id="userSearchInput" placeholder="Search by Reg Number or Name..." onkeyup="filterUsersTable()" style="padding: 8px; width: 100%; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 4px;">
-            <div style="overflow-x: auto;"><table id="userManagementTable"></table></div>`;
-        adminDash.appendChild(section);
-        container = document.getElementById('userManagementTable');
-    }
-
-    let html = `<tr><th>Reg Number / ID</th><th>Name</th><th>Role</th><th>Status</th><th>Actions</th></tr>`;
-    if (users.length === 0) {
-        html += `<tr><td colspan="5">No users found.</td></tr>`;
-    } else {
-        users.forEach(u => {
-            html += `<tr>
-                <td>${u.regNumber}</td>
-                <td>${u.name}</td>
-                <td>${u.role}</td>
-                <td><b>${u.status}</b></td>
-                <td><button type="button" class="action-btn" style="background:#e67e22;" onclick="promptPasswordReset('${u.regNumber}')">Reset Pass</button></td>
-            </tr>`;
-        });
-    }
-    container.innerHTML = html;
-}
-
-function filterUsersTable() {
-    const query = document.getElementById('userSearchInput').value.toLowerCase();
-    const filtered = globalUsersCache.filter(u => 
-        u.regNumber.toLowerCase().includes(query) || u.name.toLowerCase().includes(query)
-    );
-    renderUserManagementTable(filtered);
-}
-
-async function promptPasswordReset(regNumber) {
-    const newPassword = prompt(`Enter a new temporary password for user (${regNumber}):`);
-    if (!newPassword) return;
-
-    try {
-        const res = await fetch('/api/users/reset-password', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ regNumber, newPassword })
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Password reset failed');
-        alert(data.message);
-    } catch (err) {
-        alert(err.message);
     }
 }
 
@@ -371,11 +298,10 @@ async function loadTechData() {
                 bookingsHtml += `<tr><td colspan="8">No lab booking requests found.</td></tr>`;
             } else {
                 bookings.forEach(b => {
-                    const statusColor = b.status === 'Approved' ? '#27ae60' : '#f39c12';
                     const approveAction = b.status === 'Approved' 
-                        ? `<span style="color: ${statusColor}; font-weight: 600;">Approved</span>`
+                        ? `<span style="color: green; font-weight: 600;">Approved</span>`
                         : `<button type="button" class="action-btn" onclick="approveBooking(${b.bookingID})">Approve</button>`;
-                    bookingsHtml += `<tr><td>${b.bookingID}</td><td>${b.regNumber}</td><td>${b.labID}</td><td>${b.purpose}</td><td>${b.bookingDate}</td><td>${b.finishTime || 'N/A'}</td><td><span style="background:${statusColor}; color:#fff; padding:3px 8px; border-radius:4px; font-size:12px;">${b.status || 'Pending'}</span></td><td>${approveAction}</td></tr>`;
+                    bookingsHtml += `<tr><td>${b.bookingID}</td><td>${b.regNumber}</td><td>${b.labID}</td><td>${b.purpose}</td><td>${b.bookingDate}</td><td>${b.finishTime || 'N/A'}</td><td><b>${b.status || 'Pending'}</b></td><td>${approveAction}</td></tr>`;
                 });
             }
             document.getElementById('techBookingsTable').innerHTML = bookingsHtml;
@@ -460,46 +386,22 @@ async function loadStudentData() {
                 const bookingsRes = await fetch(`/api/bookings?regNumber=${user.regNumber}`);
                 if (bookingsRes.ok) {
                     const bookings = await bookingsRes.json();
-                    let bookingsHtml = `<tr><th>Booking ID</th><th>Lab Name</th><th>Purpose</th><th>Start Time</th><th>Finish Time</th><th>Status</th><th>Action</th></tr>`;
+                    let bookingsHtml = `<tr><th>Booking ID</th><th>Lab Name</th><th>Purpose</th><th>Start Time</th><th>Finish Time</th><th>Status</th></tr>`;
                     if (bookings.length === 0) {
-                        bookingsHtml += `<tr><td colspan="7">No active bookings found.</td></tr>`;
+                        bookingsHtml += `<tr><td colspan="6">No active bookings found.</td></tr>`;
                     } else {
                         bookings.forEach(b => {
-                            const statusColor = b.status === 'Approved' ? '#27ae60' : '#f39c12';
-                            const cancelBtn = `<button type="button" class="delete-btn" onclick="cancelBooking(${b.bookingID})">Cancel</button>`;
-                            bookingsHtml += `<tr>
-                                <td>${b.bookingID}</td>
-                                <td>${b.labName || b.labID}</td>
-                                <td>${b.purpose}</td>
-                                <td>${b.bookingDate}</td>
-                                <td>${b.finishTime || 'N/A'}</td>
-                                <td><span style="background:${statusColor}; color:#fff; padding:3px 8px; border-radius:4px; font-size:12px;">${b.status || 'Pending'}</span></td>
-                                <td>${cancelBtn}</td>
-                            </tr>`;
+                            bookingsHtml += `<tr><td>${b.bookingID}</td><td>${b.labName || b.labID}</td><td>${b.purpose}</td><td>${b.bookingDate}</td><td>${b.finishTime || 'N/A'}</td><td><b>${b.status || 'Pending'}</b></td></tr>`;
                         });
                     }
                     document.getElementById('studentBookingsTable').innerHTML = bookingsHtml;
                 }
             } catch (e) {
-                document.getElementById('studentBookingsTable').innerHTML = `<tr><td colspan="7">Booking history will appear here once connected.</td></tr>`;
+                document.getElementById('studentBookingsTable').innerHTML = `<tr><td colspan="6">Booking history will appear here once connected.</td></tr>`;
             }
         }
     } catch (err) {
         console.error('Error loading student dashboard data:', err);
-    }
-}
-
-async function cancelBooking(bookingID) {
-    if (!confirm('Are you sure you want to cancel this booking?')) return;
-    try {
-        const res = await fetch(`/api/bookings/${bookingID}`, { method: 'DELETE' });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Failed to cancel booking');
-        
-        alert(data.message || 'Booking cancelled successfully.');
-        loadStudentData();
-    } catch (err) {
-        alert(err.message);
     }
 }
 
@@ -523,7 +425,6 @@ async function submitBooking() {
     }
     if (!purpose) {
         alert('Please enter a session purpose or unit code.');
-        return;
     }
     if (!bookingDate) {
         alert('Please select a start date and time.');

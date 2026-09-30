@@ -9,7 +9,7 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ========== MONGODB CONNECTION ==========
-const MONGO_URI = process.env.MONGO_URI || 'mongodb+srv://emmanuelvulimo27_db_user:Lab1234567@cluster0.jbvtpfa.mongodb.net/complab?retryWrites=true&w=majority&appName=Cluster0';
+const MONGO_URI = process.env.MONGO_URI || 'mongodb+srv://emmanuelvulimo27_db_user:RwGEL8P5x1cT9QoP@cluster0.jbvtpfa.mongodb.net/complab?retryWrites=true&w=majority&appName=Cluster0';
 
 mongoose.connect(MONGO_URI)
   .then(() => {
@@ -148,12 +148,6 @@ app.get('/api/users', async (req, res) => {
   res.json(usersList);
 });
 
-// Added route for detailed list used by admin user management search table
-app.get('/api/users/all-detailed', async (req, res) => {
-  const usersList = await User.find().select('regNumber name role status');
-  res.json(usersList);
-});
-
 app.post('/api/users/reset-password', async (req, res) => {
   const { regNumber, newPassword } = req.body;
   if (!regNumber || !newPassword) {
@@ -164,7 +158,7 @@ app.post('/api/users/reset-password', async (req, res) => {
   user.password = newPassword;
   user.failedAttempts = 0;
   await user.save();
-  res.json({ message: `Password for ${regNumber} reset successfully!` });
+  res.json({ message: `Password for ${regNumber} reset to ${newPassword} successfully!` });
 });
 
 app.delete('/api/users/:regNumber', async (req, res) => {
@@ -214,7 +208,6 @@ app.get('/api/bookings', async (req, res) => {
   if (regNumber) enriched = enriched.filter(b => b.regNumber === regNumber);
   res.json(enriched);
 });
-
 app.get('/api/bookings/all', async (req, res) => {
   let bookings = await Booking.find();
   let labs = await Lab.find();
@@ -224,7 +217,6 @@ app.get('/api/bookings/all', async (req, res) => {
   });
   res.json(enriched);
 });
-
 app.post('/api/bookings', async (req, res) => {
   const { regNumber, email, labID, purpose, bookingDate, finishTime } = req.body;
   if (!regNumber) return res.status(400).json({ error: 'User registration number is missing. Please log in again.' });
@@ -232,10 +224,9 @@ app.post('/api/bookings', async (req, res) => {
   if (!purpose) return res.status(400).json({ error: 'Session purpose is required.' });
   if (!bookingDate) return res.status(400).json({ error: 'Start date and time are required.' });
   if (!finishTime) return res.status(400).json({ error: 'Finish date and time are required.' });
-  await Booking.create({ bookingID: Date.now(), regNumber, email, labID, purpose, bookingDate, finishTime, status: 'Pending' });
+  const newBooking = await Booking.create({ bookingID: Date.now(), regNumber, email, labID, purpose, bookingDate, finishTime, status: 'Pending' });
   res.json({ message: 'Lab booking submitted successfully!' });
 });
-
 app.post('/api/bookings/approve', async (req, res) => {
   const bookingID = Number(req.body.bookingID);
   const booking = await Booking.findOne({ bookingID });
@@ -243,13 +234,6 @@ app.post('/api/bookings/approve', async (req, res) => {
   booking.status = 'Approved';
   await booking.save();
   res.json({ message: 'Lab booking approved successfully!' });
-});
-
-// Added booking cancellation endpoint for students
-app.delete('/api/bookings/:bookingID', async (req, res) => {
-  const bookingID = Number(req.params.bookingID);
-  await Booking.deleteOne({ bookingID });
-  res.json({ message: 'Booking cancelled successfully.' });
 });
 
 if (require.main === module) {
