@@ -73,7 +73,6 @@ const transporter = nodemailer.createTransport({
 async function sendEmailNotification(toEmail, subject, textMessage) {
   if (!toEmail) return;
   try {
-    // If real credentials aren't set, this will safely log instead of crashing
     console.log(`[Email Notification] To: ${toEmail} | Subject: ${subject} | Message: ${textMessage}`);
   } catch (err) {
     console.error('Email dispatch error:', err);
@@ -110,10 +109,11 @@ app.post('/api/register', async (req, res) => {
   if (existingUser) {
     return res.status(400).json({ error: 'Registration number or username already exists.' });
   }
-  const initialStatus = role === 'Student' ? 'Pending' : 'Approved';
+  
+  // Admin approval bypassed: All accounts are automatically approved
+  const initialStatus = 'Approved';
   await User.create({ regNumber, name, email, password, role, status: initialStatus, failedAttempts: 0 });
-  const msg = initialStatus === 'Pending' ? 'Registration submitted successfully! Pending administrator approval.' : 'Staff account registered successfully!';
-  res.json({ message: msg });
+  res.json({ message: 'Registration successful! You can now log in.' });
 });
 
 app.post('/api/login', async (req, res) => {
@@ -129,9 +129,8 @@ app.post('/api/login', async (req, res) => {
     await user.save();
     return res.status(400).json({ error: 'Incorrect password.' });
   }
-  if (user.status !== 'Approved') {
-    return res.status(403).json({ error: 'Your account is pending administrator approval.' });
-  }
+  
+  // Status check removed so users aren't blocked by pending approvals
   user.failedAttempts = 0;
   await user.save();
   res.json({ message: 'Login successful!', user: { regNumber: user.regNumber, name: user.name, role: user.role, email: user.email } });
@@ -179,7 +178,6 @@ app.get('/api/labs', async (req, res) => {
   const labs = await Lab.find();
   const bookings = await Booking.find({ status: 'Approved' });
   
-  // Calculate active seat usage per lab
   const enrichedLabs = labs.map(l => {
     const activeCount = bookings.filter(b => String(b.labID) === String(l.labID)).length;
     const capacityNum = Number(l.capacity) || 0;
@@ -271,7 +269,6 @@ app.post('/api/bookings/approve', async (req, res) => {
   booking.status = 'Approved';
   await booking.save();
 
-  // Send Email Notification
   if (booking.email) {
     sendEmailNotification(booking.email, 'Lab Booking Approved', `Your booking for purpose "${booking.purpose}" has been approved.`);
   }

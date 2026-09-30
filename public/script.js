@@ -30,7 +30,7 @@ function toggleAuthMode() {
         if (authSubmitBtn) authSubmitBtn.innerText = 'Login';
         if (toggleText) toggleText.innerText = "Don't have an account? Register here";
         if (regLabel) regLabel.innerText = 'Registration Number / Username';
-        if (regInput) regInput.placeholder = 'e.g., COM/B/123456/21';
+        if (regInput) regInput.placeholder = 'e.g., user123';
     }
 }
 
@@ -44,16 +44,16 @@ function toggleRoleFields() {
 
     if (roleSelect.value === 'Administrator') {
         if (passkeyGroup) passkeyGroup.style.display = 'block';
-        if (regLabel) regLabel.innerText = 'Admin Username (Format: ***/ADMIN/****)';
-        if (regInput) regInput.placeholder = 'e.g., SYS/ADMIN/0001';
+        if (regLabel) regLabel.innerText = 'Admin Username';
+        if (regInput) regInput.placeholder = 'e.g., admin';
     } else if (roleSelect.value === 'Technician') {
         if (passkeyGroup) passkeyGroup.style.display = 'block';
-        if (regLabel) regLabel.innerText = 'Technician ID (Format: ***/TECH/****)';
-        if (regInput) regInput.placeholder = 'e.g., LAB/TECH/0001';
+        if (regLabel) regLabel.innerText = 'Technician ID';
+        if (regInput) regInput.placeholder = 'e.g., tech1';
     } else {
         if (passkeyGroup) passkeyGroup.style.display = 'none';
-        if (regLabel) regLabel.innerText = 'Student Registration Number (Format: ***/*/01-00000/_____)';
-        if (regInput) regInput.placeholder = 'e.g., ENG/S/01-12345/12345';
+        if (regLabel) regLabel.innerText = 'Registration Number / Username';
+        if (regInput) regInput.placeholder = 'e.g., student123';
     }
 }
 
@@ -87,25 +87,7 @@ async function handleAuth(event) {
             return;
         }
 
-        if (role === 'Student') {
-            const studentRegex = /^.{3}\/.{1}\/01-\d{5}\/.{5}$/;
-            if (!studentRegex.test(regNumber)) {
-                alert('Invalid Student Registration format!\nRequired format: ***/*/01-00000/*****');
-                return;
-            }
-        } else if (role === 'Technician') {
-            const techRegex = /^.{3}\/TECH\/.{4}$/;
-            if (!techRegex.test(regNumber)) {
-                alert('Invalid Technician ID format!\nRequired format: ***/TECH/****');
-                return;
-            }
-        } else if (role === 'Administrator') {
-            const adminRegex = /^.{3}\/ADMIN\/.{4}$/;
-            if (!adminRegex.test(regNumber)) {
-                alert('Invalid Admin Username format!\nRequired format: ***/ADMIN/****');
-                return;
-            }
-        }
+        // Strict format checks have been removed here so any username/format is accepted.
 
         endpoint = '/api/register';
         payload.role = role;
@@ -265,7 +247,6 @@ function filterUsersTable() {
     renderUserManagementTable(filtered);
 }
 
-// Client-side CSV Export Utility
 function exportTableToCSV(tableID, filename) {
     const table = document.getElementById(tableID);
     if (!table) return;
@@ -274,7 +255,7 @@ function exportTableToCSV(tableID, filename) {
     
     for (let i = 0; i < rows.length; i++) {
         let row = [], cols = rows[i].querySelectorAll('td, th');
-        for (let j = 0; j < cols.length - 1; j++) { // Skip last action column if desired
+        for (let j = 0; j < cols.length - 1; j++) {
             let data = cols[j].innerText.replace(/(\r\n|\n|\r)/gm, '').replace(/(\s\s)/gm, ' ');
             row.push('"' + data + '"');
         }
@@ -599,7 +580,6 @@ async function submitBooking() {
         return;
     }
 
-    // Frontend Date & Time Validation
     const now = new Date();
     const startDate = new Date(bookingDate);
     const finishDate = new Date(finishTime);
