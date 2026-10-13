@@ -7,7 +7,7 @@
   },
   "dependencies": {
     "express": "^4.22.3",
-    "mongoose": "^9.10.2",
-    "nodemailer": "^10.0.13"
+    "mongoose": "^9.11.1",
+    "nodemailer": "^10.0.16"
   }
 }
